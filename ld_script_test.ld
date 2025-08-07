@@ -6,9 +6,10 @@ gInitialMainCB2 = CB2_TestRunner;
 
 MEMORY
 {
-    EWRAM (rwx) : ORIGIN = 0x2000000, LENGTH = 256K
-    IWRAM (rwx) : ORIGIN = 0x3000000, LENGTH = 32K
-    ROM    (rx) : ORIGIN = 0x8000000, LENGTH = 32M
+    EWRAM            (rwx) : ORIGIN = 0x2000000, LENGTH = 256K
+    IWRAM            (rwx) : ORIGIN = 0x3000000, LENGTH = 0x7F00
+    IWRAM_PERSISTENT (rwx) : ORIGIN = 0x3007F00, LENGTH = 0x100
+    ROM               (rx) : ORIGIN = 0x8000000, LENGTH = 32M
 }
 
 SECTIONS {
@@ -25,8 +26,8 @@ SECTIONS {
     ALIGN(4)
     {
         src/*.o(.sbss);
-        gflib/*.o(.sbss);
         test/*.o(.sbss);
+        . = ALIGN(4);
     } > EWRAM
 
     .iwram ORIGIN(IWRAM) : AT (__iwram_lma)
@@ -34,14 +35,14 @@ SECTIONS {
     {
         __iwram_start = .;
         *(.iwram*);
+        . = ALIGN(4);
         __iwram_end = .;
     } > IWRAM
 
-    .iwram.sbss (NOLOAD) :
+    .iwram.bss (NOLOAD) :
     ALIGN(4)
     {
         src/*.o(.bss);
-        gflib/*.o(.bss);
         data/*.o(.bss);
         test/*.o(.bss);
         *libc.a:*.o(.bss*);
@@ -50,18 +51,21 @@ SECTIONS {
 
         src/m4a.o(.bss.code);
 
+        src/*.o(common_data);
         src/*.o(COMMON);
-        gflib/*.o(COMMON);
         data/*.o(COMMON);
         test/*.o(COMMON);
         *libc.a:sbrkr.o(COMMON);
-
-	/* .persistent starts at 0x3007F00 */
-	/* WARNING: This is the end of the IRQ stack, if there's too
-	 * much data it WILL be overwritten. */
-	. = 0x7F00;
-	test/*.o(.persistent);
     } > IWRAM
+
+    /* .persistent starts at 0x3007F00 */
+    /* WARNING: This is the end of the IRQ stack, if there's too
+     * much data it WILL be overwritten. */
+    .iwram.persistent (NOLOAD) :
+    ALIGN(4)
+    {
+        test/*.o(.persistent);
+    } > IWRAM_PERSISTENT
 
     /* BEGIN ROM DATA */
     . = 0x8000000;
@@ -73,13 +77,12 @@ SECTIONS {
         src/rom_header_gf.o(.text.*);
         src/rom_header_rhh.o(.text.*);
         src/*.o(.text);
-        gflib/*.o(.text);
     } > ROM =0
 
     script_data :
     ALIGN(4)
     {
-	data/*.o(script_data);
+    data/*.o(script_data);
     } > ROM =0
 
     lib_text :
@@ -95,7 +98,6 @@ SECTIONS {
     ALIGN(4)
     {
         src/*.o(.rodata*);
-        gflib/*.o(.rodata*);
         data/*.o(.rodata*);
     } > ROM =0
 
@@ -115,7 +117,7 @@ SECTIONS {
     } > ROM =0
 
     .data.iwram :
-    ALIGN(4)
+    ALIGN(8)
     {
         __iwram_lma = .;
         . = . + (__iwram_end - __iwram_start);
@@ -132,6 +134,7 @@ SECTIONS {
     ALIGN(4)
     {
         __start_tests = .;
+        test/test_test_runner.o(.tests); /* Sanity checks first. */
         test/*.o(.tests);
         __stop_tests = .;
         test/*.o(.text);
